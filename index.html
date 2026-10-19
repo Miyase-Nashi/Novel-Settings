@@ -206,6 +206,29 @@
   body.editing .pchar-avatar .rm{display:block;}
   .pchar .char-group:first-of-type{margin-top:12px;}
 
+  /* ---------- 横版人物卡（左 1:1 头像 + 右 信息） ---------- */
+  .entry.hcard{flex-direction:row;flex-wrap:wrap;gap:22px;align-items:flex-start;grid-column:1/-1;}
+  .hcard-avatar-wrap{flex:0 0 200px;max-width:42%;}
+  .hcard-avatar{
+    width:100%;aspect-ratio:1/1;border-radius:18px;overflow:hidden;position:relative;cursor:pointer;
+    background:rgba(215,163,172,.10);border:1px dashed var(--rose);
+    display:flex;align-items:center;justify-content:center;transition:.2s;
+  }
+  .hcard-avatar:hover{background:rgba(215,163,172,.18);}
+  .hcard-avatar img{width:100%;height:100%;object-fit:cover;display:block;}
+  .hcard-avatar .ph{font-size:11px;color:var(--rose-deep);text-align:center;line-height:1.6;white-space:pre-line;letter-spacing:1px;}
+  .hcard-avatar .ph.big{font-family:var(--serif);font-size:54px;color:rgba(196,134,146,.5);letter-spacing:0;line-height:1;}
+  .hcard-avatar .rm{position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:50%;background:var(--rose-deep);color:#fff;border:none;font-size:12px;cursor:pointer;display:none;line-height:22px;text-align:center;box-shadow:var(--shadow-sm);}
+  body.editing .hcard-avatar .rm{display:block;}
+  .hcard-body{flex:1;min-width:240px;display:flex;flex-direction:column;}
+  .hcard-title{font-family:var(--serif);font-size:26px;font-weight:600;margin:0 0 10px;color:var(--ink);outline:none;border-bottom:1px dashed var(--line);padding-bottom:8px;}
+  .hcard-title:focus{color:var(--rose-deep);}
+  .hcard-title:empty:before{content:"点击填写名称";color:var(--ink-soft);}
+  .hcard-fields{flex:1;}
+  .hcard-foot{margin-top:14px;}
+  .hcard-export{background:linear-gradient(135deg,#bcc9b3,#a9b8a0);color:#fff;border-color:transparent;}
+  .hcard-export:hover{color:#fff;box-shadow:var(--shadow-sm);transform:translateY(-1px);}
+
   /* ---------- 灯箱 ---------- */
   #lightbox{position:fixed;inset:0;background:rgba(60,48,48,.82);display:none;align-items:center;justify-content:center;z-index:60;padding:24px;cursor:zoom-out;}
   #lightbox.show{display:flex;}
@@ -1803,6 +1826,21 @@ function makePchar(name){
   return e;
 }
 
+/* ---------- 横版人物卡模板（左 1:1 头像 + 右 信息，可导出银行卡比例 PNG） ---------- */
+const HCARD_TEMPLATE = [
+  { title: "", fields: ["性别","出身","所属","生日","年龄","身高","性取向","个人简述"] }
+];
+function buildHcardFields(){
+  const arr = [{ label:"名字", value:"" }];
+  HCARD_TEMPLATE.forEach(g => g.fields.forEach(f => arr.push({ label:f, value:"" })));
+  return arr;
+}
+function makeHcard(name){
+  const e = { id: uid(), type:"hcard", fields: buildHcardFields(), avatar: "", images: [] };
+  e.fields[0].value = name || "";
+  return e;
+}
+
 /* ---------- 默认数据（首次打开时使用，已采用 模块→分组→条目 结构） ---------- */
 const DEFAULT_DATA = {
   title: "未命名百合小说 · 设定集",
@@ -1910,11 +1948,11 @@ function h(tag, attrs, ...kids){
   return e;
 }
 function normalizeEntry(en){
-  if(en.type !== "char" && en.type !== "org" && en.type !== "pchar") return;
-  const builder = en.type === "char" ? buildCharFields : (en.type === "org" ? buildOrgFields : buildPcharFields);
+  if(en.type !== "char" && en.type !== "org" && en.type !== "pchar" && en.type !== "hcard") return;
+  const builder = en.type === "char" ? buildCharFields : (en.type === "org" ? buildOrgFields : (en.type === "pchar" ? buildPcharFields : buildHcardFields));
   const map = {}; (en.fields || []).forEach(f => { map[f.label] = f.value; });
   en.fields = builder().map(f => ({ label: f.label, value: (map[f.label] != null ? map[f.label] : "") }));
-  if(en.type === "pchar" && typeof en.avatar !== "string") en.avatar = "";
+  if((en.type === "pchar" || en.type === "hcard") && typeof en.avatar !== "string") en.avatar = "";
 }
 function findMod(id){ return DATA.modules.find(m => m.id === id); }
 function findFolder(mid, fid){ const m = findMod(mid); return m ? m.folders.find(f => f.id === fid) : null; }
@@ -2028,6 +2066,7 @@ function renderFolder(mod, folder, idx, total){
     body.appendChild(h("div", { class: "folder-add" },
       h("button", { class: "mini", onClick: () => addEntry(mod, folder, "char") }, "＋ 人物卡片"),
       h("button", { class: "mini", onClick: () => addEntry(mod, folder, "pchar") }, "＋ 简洁人物卡"),
+      h("button", { class: "mini", onClick: () => addEntry(mod, folder, "hcard") }, "＋ 横版人物卡"),
       h("button", { class: "mini", onClick: () => addEntry(mod, folder, "org") }, "＋ 机构卡片"),
       h("button", { class: "mini", onClick: () => addEntry(mod, folder, "text") }, "＋ 普通条目")
     ));
@@ -2071,6 +2110,12 @@ function renderEntry(mod, folder, en, idx, total){
     h("button", { class: "mini", onClick: () => fileInput.click() }, "🖼 添加图片"),
     h("button", { class: "mini danger", onClick: () => delEntry(mod.id, folder.id, en.id) }, "🗑 删除")
   );
+
+  if(en.type === "hcard"){
+    const kids = renderHcard(mod, folder, en);
+    kids.push(reorder);
+    return h("div", { class: "entry char hcard" }, ...kids);
+  }
 
   if(en.type === "pchar"){
     const kids = renderPchar(mod, folder, en);
@@ -2185,6 +2230,147 @@ function uploadAvatar(en, input){
   input.value = "";
 }
 
+/* ---------- 横版人物卡渲染（左 1:1 头像 / 右 信息 + 导出 PNG） ---------- */
+function renderHcard(mod, folder, en){
+  const ds = (role, extra) => Object.assign({ role: role, mid: mod.id, fid: folder.id, eid: en.id }, extra || {});
+
+  const avatarInput = h("input", { type: "file", accept: "image/*", style: "display:none",
+    onChange: e => uploadAvatar(en, e.target) });
+  const avatarBox = h("div", { class: "hcard-avatar", title: en.avatar ? "查看头像" : "上传 1:1 头像",
+    onClick: () => { if(en.avatar) openLight(en.avatar); else if(editMode) avatarInput.click(); } });
+  if(en.avatar){
+    avatarBox.appendChild(h("img", { src: en.avatar, alt: "" }));
+    if(editMode) avatarBox.appendChild(h("button", { class: "rm", title: "移除头像",
+      onClick: ev => { ev.stopPropagation(); en.avatar = ""; saveLocal(); render(); } }, "✕"));
+  } else if(editMode){
+    avatarBox.appendChild(h("div", { class: "ph" }, "＋\n上传头像\n（1:1）"));
+  } else {
+    const nm = ((en.fields[0] && en.fields[0].value) || "").trim();
+    avatarBox.appendChild(h("div", { class: "ph big" }, nm ? nm.slice(0, 1) : "？"));
+    avatarBox.style.cursor = "default";
+  }
+  const avatarWrap = h("div", { class: "hcard-avatar-wrap" }, avatarBox, editMode ? avatarInput : null);
+
+  const title = h("div", { class: "hcard-title",
+    contenteditable: editMode ? "true" : null,
+    dataset: ds("chartitle"),
+    onKeydown: e => { if(e.key === "Enter"){ e.preventDefault(); e.target.blur(); } },
+    onInput: e => { commitEditable(e.target); saveLocal(); },
+    onBlur: e => { commitEditable(e.target); saveLocal(); } },
+    (en.fields[0] && en.fields[0].value) ? en.fields[0].value : "");
+
+  const fieldsBox = h("div", { class: "hcard-fields" });
+  let idx = 1;
+  HCARD_TEMPLATE.forEach(g => g.fields.forEach(f => {
+    fieldsBox.appendChild(h("div", { class: "char-field" },
+      h("label", {}, f),
+      h("div", { class: "val", contenteditable: editMode ? "true" : null,
+        dataset: ds("charfield", { fi: String(idx) }),
+        onInput: ev => { commitEditable(ev.target); saveLocal(); },
+        onBlur: ev => { commitEditable(ev.target); saveLocal(); } },
+        (en.fields[idx] && en.fields[idx].value) ? en.fields[idx].value : "")
+    ));
+    idx++;
+  }));
+
+  const exportBtn = h("button", { class: "mini hcard-export",
+    onClick: (e) => { e.stopPropagation(); exportHcardPNG(en); } }, "🖼 导出 PNG（银行卡比例）");
+
+  const body = h("div", { class: "hcard-body" }, title, fieldsBox, h("div", { class: "hcard-foot" }, exportBtn));
+  return [avatarWrap, body];
+}
+
+/* ---------- 横版人物卡导出 PNG（银行卡比例 ≈ 1.586:1） ---------- */
+function roundRectPath(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  if(ctx.roundRect){ ctx.roundRect(x, y, w, h, r); return; }
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function wrapText(ctx, text, maxWidth){
+  if(text == null || text === "") return [""];
+  const lines = [];
+  String(text).split("\n").forEach(para => {
+    let line = "";
+    for(const ch of para){
+      const test = line + ch;
+      if(ctx.measureText(test).width > maxWidth && line){ lines.push(line); line = ch; }
+      else line = test;
+    }
+    lines.push(line);
+  });
+  return lines;
+}
+function exportHcardPNG(en){
+  const W = 1586, H = 1000;   // 银行卡比例 85.6×53.98mm ≈ 1.586:1
+  const scale = 2;
+  const name = (en.fields[0] && en.fields[0].value) ? en.fields[0].value : "未命名";
+  const start = () => {
+    const cv = document.createElement("canvas");
+    cv.width = W * scale; cv.height = H * scale;
+    const ctx = cv.getContext("2d");
+    ctx.scale(scale, scale);
+    const g = ctx.createLinearGradient(0, 0, W, H);
+    g.addColorStop(0, "#fdf6f3"); g.addColorStop(1, "#f1ebe4");
+    ctx.fillStyle = g; roundRectPath(ctx, 0, 0, W, H, 40); ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = "#d7a3ac";
+    roundRectPath(ctx, 8, 8, W - 16, H - 16, 34); ctx.stroke();
+    const pad = 70, av = H - pad * 2, ax = pad, ay = pad;
+    ctx.save();
+    roundRectPath(ctx, ax, ay, av, av, 24); ctx.clip();
+    ctx.fillStyle = "#efe4df"; ctx.fillRect(ax, ay, av, av);
+    ctx.restore();
+    const drawFields = () => {
+      const rx = ax + av + 64, rw = W - pad - rx;
+      ctx.textBaseline = "alphabetic";
+      ctx.fillStyle = "#c48692";
+      ctx.font = '600 58px "Noto Serif SC", serif';
+      ctx.fillText(name, rx, ay + 56);
+      ctx.strokeStyle = "#e7dcd6"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(rx, ay + 86); ctx.lineTo(W - pad, ay + 86); ctx.stroke();
+      let y = ay + 142;
+      for(let i = 1; i < en.fields.length; i++){
+        const f = en.fields[i];
+        ctx.fillStyle = "#c48692"; ctx.font = '500 27px "Noto Sans SC", sans-serif';
+        ctx.fillText(f.label, rx, y);
+        ctx.fillStyle = "#5e514d"; ctx.font = '400 30px "Noto Sans SC", sans-serif';
+        const lines = wrapText(ctx, f.value || "—", rw);
+        let yy = y + 36;
+        for(const ln of lines){ ctx.fillText(ln, rx, yy); yy += 40; }
+        y = yy + 4;
+      }
+      cv.toBlob((blob) => {
+        const a = document.createElement("a");
+        const safe = (name || "人物卡").replace(/[\\/:*?"<>|]/g, "_");
+        a.download = safe + "_横版人物卡.png";
+        a.href = URL.createObjectURL(blob);
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+        toast("已导出 PNG ✓");
+      }, "image/png");
+    };
+    if(en.avatar){
+      const img = new Image();
+      img.onload = () => {
+        ctx.save();
+        roundRectPath(ctx, ax, ay, av, av, 24); ctx.clip();
+        const s = Math.min(img.width, img.height);
+        ctx.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, ax, ay, av, av);
+        ctx.restore();
+        drawFields();
+      };
+      img.onerror = drawFields;
+      img.src = en.avatar;
+    } else drawFields();
+  };
+  if(document.fonts && document.fonts.ready){ document.fonts.ready.then(start); }
+  else start();
+}
+
 function buildImgBox(en){
   const box = h("div", { class: "entry-imgs" });
   (en.images || []).forEach((src, i) => {
@@ -2255,6 +2441,7 @@ function delFolder(mid, fid){
 function addEntry(mod, folder, type){
   if(type === "char") folder.entries.push(makeChar(""));
   else if(type === "pchar") folder.entries.push(makePchar(""));
+  else if(type === "hcard") folder.entries.push(makeHcard(""));
   else if(type === "org") folder.entries.push(makeOrg(""));
   else folder.entries.push({ id: uid(), type: "text", title: "新条目", text: "", images: [] });
   saveLocal(); render();
